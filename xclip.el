@@ -1,35 +1,33 @@
 ;;; xclip.el --- Emacs Interface to XClip
 
-;; Copyright (C) 2007  Leo Shidai Liu
+;; Copyright (C) 2007, 2012  Free Software Foundation, Inc.
 
-;; Author: Leo Shidai Liu <shidai.liu@gmail.com>
+;; Author: Leo Liu <sdl.web@gmail.com>
 ;; Keywords: convenience, tools
 ;; Created: 2007-12-30
+;; Version: 1.0
 
-;; $Id: xclip.el,v 0.9 2008/02/10 11:12:56 leo Exp $
-
-;; This file is free software; you can redistribute it and/or modify
+;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
-;; the Free Software Foundation; either version 3, or (at your option)
-;; any later version.
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
 
-;; This file is distributed in the hope that it will be useful,
+;; This program is distributed in the hope that it will be useful,
 ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
 ;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ;; GNU General Public License for more details.
 
 ;; You should have received a copy of the GNU General Public License
-;; along with GNU Emacs; see the file COPYING.  If not, write to
-;; the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
-;; Boston, MA 02110-1301, USA.
+;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 ;;; Commentary:
 
 ;; This code provides an Emacs interface to the tool with the same
 ;; name on http://people.debian.org/~kims/xclip/.
+;; Just add (xclip-mode 1) to your ~/.emacs.
 
 ;;; Code:
-(defvar xclip-program (executable-find "xclip")
+(defvar xclip-program "xclip"
   "Name of XClip program tool.")
 
 (defvar xclip-select-enable-clipboard t
@@ -46,9 +44,9 @@ This is in addition to, but in preference to, the primary selection.")
   "TYPE is a symbol: primary, secondary and clipboard.
 
 See `x-set-selection'."
-  (when (and xclip-program (getenv "DISPLAY"))
+  (when (and (executable-find xclip-program) (getenv "DISPLAY"))
     (let* ((process-connection-type nil)
-           (proc (start-process "xclip" nil "xclip"
+           (proc (start-process "xclip" nil xclip-program
                                 "-selection" (symbol-name type))))
       (process-send-string proc data)
       (process-send-eof proc))))
@@ -63,10 +61,12 @@ See `x-set-selection'."
 
 (defun xclip-selection-value ()
   "See `x-cut-buffer-or-selection-value'."
-  (when (and xclip-program (getenv "DISPLAY"))
+  (when (and (executable-find xclip-program) (getenv "DISPLAY"))
     (let (clip-text primary-text)
       (when xclip-select-enable-clipboard
-        (setq clip-text (shell-command-to-string "xclip -o -selection clipboard"))
+        (setq clip-text (shell-command-to-string
+                         (concat (shell-quote-argument xclip-program)
+                                 " -o -selection clipboard")))
         (setq clip-text
               (cond ;; check clipboard selection
                ((or (not clip-text) (string= clip-text ""))
@@ -78,7 +78,8 @@ See `x-set-selection'."
                 (setq xclip-last-selected-text-clipboard clip-text)
                 nil)
                (t (setq xclip-last-selected-text-clipboard clip-text)))))
-      (setq primary-text (shell-command-to-string "xclip -o"))
+      (setq primary-text (shell-command-to-string
+                          (concat (shell-quote-argument xclip-program) " -o")))
       (setq primary-text
             (cond ;; check primary selection
              ((or (not primary-text) (string= primary-text ""))
@@ -92,21 +93,21 @@ See `x-set-selection'."
              (t (setq xclip-last-selected-text-primary primary-text))))
       (or clip-text primary-text))))
 
-;;;###autoload
 (defun turn-on-xclip ()
-  (interactive)
   (setq interprogram-cut-function 'xclip-select-text)
   (setq interprogram-paste-function 'xclip-selection-value))
 
-;;;###autoload
 (defun turn-off-xclip ()
-  (interactive)
   (setq interprogram-cut-function nil)
   (setq interprogram-paste-function nil))
 
-
-(add-hook 'terminal-init-xterm-hook 'turn-on-xclip)
-
+;;;###autoload
+(define-minor-mode xclip-mode
+  "Minor mode to use the `xclip' program to copy&paste."
+  :global t
+  (if xclip-mode
+      (add-hook 'terminal-init-xterm-hook 'turn-on-xclip)
+    (remove-hook 'terminal-init-xterm-hook 'turn-on-xclip)))
 
 (provide 'xclip)
 ;;; xclip.el ends here
