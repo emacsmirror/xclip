@@ -1,11 +1,11 @@
-;;; xclip.el --- Emacs Interface to XClip
+;;; xclip.el --- use xclip to copy&paste             -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2007, 2012  Free Software Foundation, Inc.
+;; Copyright (C) 2007, 2012, 2013  Free Software Foundation, Inc.
 
 ;; Author: Leo Liu <sdl.web@gmail.com>
 ;; Keywords: convenience, tools
 ;; Created: 2007-12-30
-;; Version: 1.0
+;; Version: 1.1
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -22,17 +22,24 @@
 
 ;;; Commentary:
 
-;; This code provides an Emacs interface to the tool with the same
-;; name on http://people.debian.org/~kims/xclip/.
-;; Just add (xclip-mode 1) to your ~/.emacs.
+;; This package allows emacs to copy to and paste from the X clipboard
+;; when running in xterm. It uses the external command-line tool xclip
+;; found on http://xclip.sourceforge.net.
+;;
+;; To use: (xclip-mode 1)
 
 ;;; Code:
-(defvar xclip-program "xclip"
-  "Name of XClip program tool.")
 
-(defvar xclip-select-enable-clipboard t
+(defcustom xclip-program "xclip"
+  "Name of the xclip program."
+  :type 'string
+  :group 'killing)
+
+(defcustom xclip-select-enable-clipboard t
   "Non-nil means cutting and pasting uses the clipboard.
-This is in addition to, but in preference to, the primary selection.")
+This is in addition to, but in preference to, the primary selection."
+  :type 'boolean
+  :group 'killing)
 
 (defvar xclip-last-selected-text-clipboard nil
   "The value of the CLIPBOARD X selection from xclip.")
@@ -43,15 +50,15 @@ This is in addition to, but in preference to, the primary selection.")
 (defun xclip-set-selection (type data)
   "TYPE is a symbol: primary, secondary and clipboard.
 
-See `x-set-selection'."
-  (when (and (executable-find xclip-program) (getenv "DISPLAY"))
+See also `x-set-selection'."
+  (when (getenv "DISPLAY")
     (let* ((process-connection-type nil)
            (proc (start-process "xclip" nil xclip-program
                                 "-selection" (symbol-name type))))
       (process-send-string proc data)
       (process-send-eof proc))))
 
-(defun xclip-select-text (text &optional push)
+(defun xclip-select-text (text)
   "See `x-select-text'."
   (xclip-set-selection 'primary text)
   (setq xclip-last-selected-text-primary text)
@@ -60,53 +67,56 @@ See `x-set-selection'."
     (setq xclip-last-selected-text-clipboard text)))
 
 (defun xclip-selection-value ()
-  "See `x-cut-buffer-or-selection-value'."
-  (when (and (executable-find xclip-program) (getenv "DISPLAY"))
-    (let (clip-text primary-text)
-      (when xclip-select-enable-clipboard
-        (setq clip-text (shell-command-to-string
-                         (concat (shell-quote-argument xclip-program)
-                                 " -o -selection clipboard")))
-        (setq clip-text
-              (cond ;; check clipboard selection
-               ((or (not clip-text) (string= clip-text ""))
-                (setq xclip-last-selected-text-primary nil))
-               ((eq      clip-text xclip-last-selected-text-clipboard) nil)
-               ((string= clip-text xclip-last-selected-text-clipboard)
-                ;; Record the newer string,
-                ;; so subsequent calls can use the `eq' test.
-                (setq xclip-last-selected-text-clipboard clip-text)
-                nil)
-               (t (setq xclip-last-selected-text-clipboard clip-text)))))
-      (setq primary-text (shell-command-to-string
-                          (concat (shell-quote-argument xclip-program) " -o")))
-      (setq primary-text
-            (cond ;; check primary selection
-             ((or (not primary-text) (string= primary-text ""))
-              (setq xclip-last-selected-text-primary nil))
-             ((eq      primary-text xclip-last-selected-text-primary) nil)
-             ((string= primary-text xclip-last-selected-text-primary)
-              ;; Record the newer string,
-              ;; so subsequent calls can use the `eq' test.
-              (setq xclip-last-selected-text-primary primary-text)
+  "See `x-selection-value'."
+  (when (getenv "DISPLAY")
+    (let ((clip-text (when xclip-select-enable-clipboard
+                       (with-output-to-string
+                         (process-file xclip-program nil standard-output nil
+                                       "-o" "-selection" "clipboard")))))
+      (setq clip-text
+            (cond                       ; Check clipboard selection.
+             ((or (not clip-text) (string= clip-text ""))
+              (setq xclip-last-selected-text-clipboard nil))
+             ((eq clip-text xclip-last-selected-text-clipboard)
               nil)
-             (t (setq xclip-last-selected-text-primary primary-text))))
-      (or clip-text primary-text))))
+             ((string= clip-text xclip-last-selected-text-clipboard)
+              ;; Record the newer string so subsequent calls can use
+              ;; the `eq' test.
+              (setq xclip-last-selected-text-clipboard clip-text)
+              nil)
+             (t (setq xclip-last-selected-text-clipboard clip-text))))
+      (or clip-text
+          (let ((primary-text (with-output-to-string
+                                (process-file xclip-program nil
+                                              standard-output nil "-o"))))
+            (setq primary-text
+                  (cond                 ; Check primary selection.
+                   ((or (not primary-text) (string= primary-text ""))
+                    (setq xclip-last-selected-text-primary nil))
+                   ((eq primary-text xclip-last-selected-text-primary)
+                    nil)
+                   ((string= primary-text xclip-last-selected-text-primary)
+                    ;; Record the newer string so subsequent calls can
+                    ;; use the `eq' test.
+                    (setq xclip-last-selected-text-primary primary-text)
+                    nil)
+                   (t (setq xclip-last-selected-text-primary primary-text))))
+            primary-text)))))
 
 (defun turn-on-xclip ()
   (setq interprogram-cut-function 'xclip-select-text)
   (setq interprogram-paste-function 'xclip-selection-value))
-
-(defun turn-off-xclip ()
-  (setq interprogram-cut-function nil)
-  (setq interprogram-paste-function nil))
 
 ;;;###autoload
 (define-minor-mode xclip-mode
   "Minor mode to use the `xclip' program to copy&paste."
   :global t
   (if xclip-mode
-      (add-hook 'terminal-init-xterm-hook 'turn-on-xclip)
+      (progn
+        (or (executable-find xclip-program)
+            (signal 'file-error (list "Searching for program"
+                                      xclip-program "no such file")))
+        (add-hook 'terminal-init-xterm-hook 'turn-on-xclip))
     (remove-hook 'terminal-init-xterm-hook 'turn-on-xclip)))
 
 (provide 'xclip)
