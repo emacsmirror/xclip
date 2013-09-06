@@ -5,7 +5,7 @@
 ;; Author: Leo Liu <sdl.web@gmail.com>
 ;; Keywords: convenience, tools
 ;; Created: 2007-12-30
-;; Version: 1.1
+;; Version: 1.2
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -41,6 +41,15 @@ This is in addition to, but in preference to, the primary selection."
   :type 'boolean
   :group 'killing)
 
+(defcustom xclip-use-pbcopy&paste (and xclip-select-enable-clipboard
+                                       (eq system-type 'darwin)
+                                       (executable-find "pbcopy")
+                                       t)
+  "Non-nil means using pbcopy and pbpaste instead of xclip.
+If non-nil `xclip-program' is ignored."
+  :type 'boolean
+  :group 'killing)
+
 (defvar xclip-last-selected-text-clipboard nil
   "The value of the CLIPBOARD X selection from xclip.")
 
@@ -51,12 +60,17 @@ This is in addition to, but in preference to, the primary selection."
   "TYPE is a symbol: primary, secondary and clipboard.
 
 See also `x-set-selection'."
-  (when (getenv "DISPLAY")
-    (let* ((process-connection-type nil)
-           (proc (start-process "xclip" nil xclip-program
-                                "-selection" (symbol-name type))))
+  (let* ((process-connection-type nil)
+         (proc (cond
+                (xclip-use-pbcopy&paste
+                 (start-file-process "pbcopy" nil "pbcopy"))
+                ((getenv "DISPLAY")
+                 (start-file-process "xclip" nil xclip-program
+                                     "-selection" (symbol-name type))))))
+    (when proc
       (process-send-string proc data)
-      (process-send-eof proc))))
+      (process-send-eof proc))
+    data))
 
 (defun xclip-select-text (text)
   "See `x-select-text'."
@@ -68,24 +82,28 @@ See also `x-set-selection'."
 
 (defun xclip-selection-value ()
   "See `x-selection-value'."
-  (when (getenv "DISPLAY")
-    (let ((clip-text (when xclip-select-enable-clipboard
-                       (with-output-to-string
+  (let ((clip-text (when xclip-select-enable-clipboard
+                     (with-output-to-string
+                       (cond
+                        (xclip-use-pbcopy&paste
+                         (process-file "pbpaste" nil standard-output nil))
+                        ((getenv "DISPLAY")
                          (process-file xclip-program nil standard-output nil
-                                       "-o" "-selection" "clipboard")))))
-      (setq clip-text
-            (cond                       ; Check clipboard selection.
-             ((or (not clip-text) (string= clip-text ""))
-              (setq xclip-last-selected-text-clipboard nil))
-             ((eq clip-text xclip-last-selected-text-clipboard)
-              nil)
-             ((string= clip-text xclip-last-selected-text-clipboard)
-              ;; Record the newer string so subsequent calls can use
-              ;; the `eq' test.
-              (setq xclip-last-selected-text-clipboard clip-text)
-              nil)
-             (t (setq xclip-last-selected-text-clipboard clip-text))))
-      (or clip-text
+                                       "-o" "-selection" "clipboard")))))))
+    (setq clip-text
+          (cond                         ; Check clipboard selection.
+           ((or (not clip-text) (string= clip-text ""))
+            (setq xclip-last-selected-text-clipboard nil))
+           ((eq clip-text xclip-last-selected-text-clipboard)
+            nil)
+           ((string= clip-text xclip-last-selected-text-clipboard)
+            ;; Record the newer string so subsequent calls can use the
+            ;; `eq' test.
+            (setq xclip-last-selected-text-clipboard clip-text)
+            nil)
+           (t (setq xclip-last-selected-text-clipboard clip-text))))
+    (or clip-text
+        (when (getenv "DISPLAY")
           (let ((primary-text (with-output-to-string
                                 (process-file xclip-program nil
                                               standard-output nil "-o"))))
@@ -113,9 +131,11 @@ See also `x-set-selection'."
   :global t
   (if xclip-mode
       (progn
-        (or (executable-find xclip-program)
+        (or xclip-use-pbcopy&paste
+            (executable-find xclip-program)
             (signal 'file-error (list "Searching for program"
                                       xclip-program "no such file")))
+        ;; NOTE: See `tty-run-terminal-initialization' and term/README
         (add-hook 'terminal-init-xterm-hook 'turn-on-xclip))
     (remove-hook 'terminal-init-xterm-hook 'turn-on-xclip)))
 
