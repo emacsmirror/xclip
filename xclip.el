@@ -5,7 +5,7 @@
 ;; Author: Leo Liu <sdl.web@gmail.com>
 ;; Keywords: convenience, tools
 ;; Created: 2007-12-30
-;; Version: 1.2
+;; Version: 1.3
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -103,7 +103,7 @@ See also `x-set-selection'."
             nil)
            (t (setq xclip-last-selected-text-clipboard clip-text))))
     (or clip-text
-        (when (getenv "DISPLAY")
+        (when (and (not xclip-use-pbcopy&paste) (getenv "DISPLAY"))
           (let ((primary-text (with-output-to-string
                                 (process-file xclip-program nil
                                               standard-output nil "-o"))))
