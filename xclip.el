@@ -5,7 +5,7 @@
 ;; Author: Leo Liu <sdl.web@gmail.com>
 ;; Keywords: convenience, tools
 ;; Created: 2007-12-30
-;; Version: 1.4
+;; Version: 1.5
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -86,26 +86,26 @@ See also `x-set-selection'."
           (pcase xclip-method
             ('pbpaste
              (when (memq type '(clipboard CLIPBOARD))
-               (start-file-process
+               (start-process
                 "pbcopy" nil
                 (replace-regexp-in-string "\\(.*\\)pbpaste" "\\1pbcopy"
                                           xclip-program 'fixedcase))))
             ('getclip
              (when (memq type '(clipboard CLIPBOARD))
-               (start-file-process
+               (start-process
                 "putclip" nil
                 (replace-regexp-in-string "\\(.*\\)getclip" "\\1putclip"
                                           xclip-program 'fixedcase))))
             ('xclip
              (when (getenv "DISPLAY")
-               (start-file-process "xclip" nil xclip-program
-                                   "-selection" (symbol-name type))))
+               (start-process "xclip" nil xclip-program
+                              "-selection" (symbol-name type))))
             ('xsel
              (when (and (getenv "DISPLAY")
                         (memq type '(clipboard CLIPBOARD
                                      primary PRIMARY
                                      secondary SECONDARY)))
-               (start-file-process
+               (start-process
                 "xsel" nil xclip-program
                 "-i" (concat "--" (downcase (symbol-name type))))))
             (method (error "Unknown `xclip-method': %S" method)))))
