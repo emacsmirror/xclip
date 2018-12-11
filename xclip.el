@@ -1,11 +1,11 @@
-;;; xclip.el --- Copy&paste GUI clipboard from text terminal  -*- lexical-binding: t; -*-
+;;; xclip.el --- Copy&paste GUI clipboard from text terminal  -*- lexical-binding:t -*-
 
 ;; Copyright (C) 2007, 2012, 2013, 2017, 2018  Free Software Foundation, Inc.
 
 ;; Author: Leo Liu <sdl.web@gmail.com>
 ;; Keywords: convenience, tools
 ;; Created: 2007-12-30
-;; Version: 1.5
+;; Version: 1.6
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -36,6 +36,13 @@
 ;; To use, just add (xclip-mode 1) to your ~/.emacs or do `M-x clip-mode'
 ;; after which the usual kill/yank commands will use the GUI selections
 ;; according to `select-enable-clipboard/primary'.
+
+;; An alternative package for use under X11 is
+;; [Gpastel](https://gitlab.petton.fr/DamienCassou/gpastel), which uses
+;; [GPaste](https://github.com/Keruspe/GPaste/) rather than Xclip and hooks
+;; into Emacs in a different way.  AFAICT it currently only supports
+;; copy/pasting from an external application to Emacs and not from Emacs to
+;; another application (for which it relies on the default code).
 
 ;;; Code:
 
@@ -84,23 +91,23 @@ See also `x-set-selection'."
   (let* ((process-connection-type nil)
          (proc
           (pcase xclip-method
-            ('pbpaste
+            (`pbpaste
              (when (memq type '(clipboard CLIPBOARD))
                (start-process
                 "pbcopy" nil
                 (replace-regexp-in-string "\\(.*\\)pbpaste" "\\1pbcopy"
                                           xclip-program 'fixedcase))))
-            ('getclip
+            (`getclip
              (when (memq type '(clipboard CLIPBOARD))
                (start-process
                 "putclip" nil
                 (replace-regexp-in-string "\\(.*\\)getclip" "\\1putclip"
                                           xclip-program 'fixedcase))))
-            ('xclip
+            (`xclip
              (when (getenv "DISPLAY")
                (start-process "xclip" nil xclip-program
                               "-selection" (symbol-name type))))
-            ('xsel
+            (`xsel
              (when (and (getenv "DISPLAY")
                         (memq type '(clipboard CLIPBOARD
                                      primary PRIMARY
@@ -118,17 +125,17 @@ See also `x-set-selection'."
   "TYPE is a symbol: primary, secondary and clipboard."
   (with-output-to-string
     (pcase xclip-method
-      ('pbpaste
+      (`pbpaste
        (when (memq type '(clipboard CLIPBOARD))
          (process-file xclip-program nil standard-output nil "-Prefer" "txt")))
-      ('getclip
+      (`getclip
        (when (memq type '(clipboard CLIPBOARD))
          (process-file xclip-program nil standard-output nil)))
-      ('xclip
+      (`xclip
        (when (getenv "DISPLAY")
          (process-file xclip-program nil standard-output nil
                        "-o" "-selection" (symbol-name type))))
-      ('xsel
+      (`xsel
        (when (and (getenv "DISPLAY")
                   (memq type '(clipboard CLIPBOARD
                                primary PRIMARY
@@ -154,114 +161,112 @@ See also `x-set-selection'."
 ;;;; Glue code for Emacs ≥ 25
 
 (eval-when-compile
-  (defmacro xclip--if-macro-fboundp (name then &rest else)
+  (defmacro xclip--if (test then &rest else)
     ;; FIXME: copy&pasted from AUCTeX's tex.el.
-    "Execute THEN if macro NAME is bound and ELSE otherwise.
-Essentially,
+    "Execute THEN if TEST is non-nil and ELSE otherwise.
 
-  (xclip--if-macro-fboundp name then else...)
+TEST is assumed to be \"monotone\" in Emacs versions: if it is non-nil in
+Emacs-NN, it should also always be non-nil in Emacs≥NN.
 
-is equivalent to
-
-  (if (fboundp 'name) then else...)
-
-but takes care of byte-compilation issues where the byte-code for
-the latter could signal an error if it has been compiled with
-emacs 24.1 and is then later run by emacs 24.5."
+The macro takes care of byte-compilation issues that might affect THEN,
+where the byte-code for it could signal an error if it has been compiled with
+Emacs-NN and is then later run by Emacs>NN."
     (declare (indent 2) (debug (symbolp form &rest form)))
-    (if (fboundp name)           ;If macro exists at compile-time, just use it.
+    (if (eval test t)    ;If test is already true at compile-time, just use it.
         then
-      `(if (fboundp ',name)             ;Else, check if it exists at run-time.
+      `(if ,test                        ;Else, check at run-time.
 	   (eval ',then)                ;If it does, then run the then code.
          ,@else))))                     ;Otherwise, run the else code.
 
-(xclip--if-macro-fboundp cl-defmethod
- (progn
-   ;; FIXME: implement the methods for gui-backend-selection-owner-p
-   ;; and gui-backend-selection-exists-p.  Not sure about pbcopy, but at least
-   ;; with xcopy, gui-backend-selection-owner-p should just require us
-   ;; to use "-silent" and keep track of the liveness of the subprocess.
+(xclip--if (>= emacs-major-version 25)
+    (progn
+      ;; FIXME: implement the methods for gui-backend-selection-owner-p
+      ;; and gui-backend-selection-exists-p.  Not sure about pbcopy, but at
+      ;; least with xcopy, gui-backend-selection-owner-p should just require us
+      ;; to use "-silent" and keep track of the liveness of the subprocess.
 
-   (cl-defmethod gui-backend-get-selection (selection-symbol _target-type
-                                            &context (window-system nil))
-     (if (not xclip-mode)
-         (cl-call-next-method)
-       (xclip-get-selection selection-symbol)))
+      (cl-defmethod gui-backend-get-selection (selection-symbol _target-type
+                                               &context (window-system nil))
+        (if (not xclip-mode)
+            (cl-call-next-method)
+          (xclip-get-selection selection-symbol)))
 
-   (cl-defmethod gui-backend-set-selection (selection-symbol value
-                                            &context (window-system nil))
-     (if (not xclip-mode)
-         (cl-call-next-method)
-       (xclip-set-selection selection-symbol value)
-       nil))
+      (cl-defmethod gui-backend-set-selection (selection-symbol value
+                                               &context (window-system nil))
+        (if (not xclip-mode)
+            (cl-call-next-method)
+          (xclip-set-selection selection-symbol value)
+          nil))
 
-   ;; BIG UGLY HACK!
-   ;; xterm.el has a defmethod to use some poorly supported escape sequences
-   ;; (code named OSC 52) for clipboard interaction, and enables it by default.
-   ;; Problem is, that its defmethod takes precedence over our defmethod,
-   ;; so we need to disable it in order to be called.
-   (cl-defmethod gui-backend-set-selection :extra "xclip-override"
-     (selection-symbol value &context (window-system nil)
-                       ((terminal-parameter nil 'xterm--set-selection) (eql t)))
-     ;; Disable this method which doesn't work anyway in 99% of the cases!
-     (setf (terminal-parameter nil 'xterm--set-selection) nil)
-     ;; Try again!
-     (gui-backend-set-selection selection-symbol value))))
+      ;; BIG UGLY HACK!
+      ;; xterm.el has a defmethod to use some (poorly supported) escape
+      ;; sequences (code named OSC 52) for clipboard interaction, and enables
+      ;; it by default.
+      ;; Problem is, that its defmethod takes precedence over our defmethod,
+      ;; so we need to disable it in order to be called.
+      (cl-defmethod gui-backend-set-selection :extra "xclip-override"
+          (selection-symbol value
+           &context (window-system nil)
+                    ((terminal-parameter nil 'xterm--set-selection) (eql t)))
+        ;; Disable this method which doesn't work anyway in 99% of the cases!
+        (setf (terminal-parameter nil 'xterm--set-selection) nil)
+        ;; Try again!
+        (gui-backend-set-selection selection-symbol value)))
 
 ;;;; Glue code for Emacs < 25
 
-(defvar xclip-last-selected-text-clipboard nil
-  "The value of the CLIPBOARD X selection from xclip.")
+  (defvar xclip-last-selected-text-clipboard nil
+    "The value of the CLIPBOARD X selection from xclip.")
 
-(defvar xclip-last-selected-text-primary nil
-  "The value of the PRIMARY X selection from xclip.")
+  (defvar xclip-last-selected-text-primary nil
+    "The value of the PRIMARY X selection from xclip.")
 
-(defun xclip-select-text (text)
-  "See `x-select-text'."
-  (xclip-set-selection 'primary text)
-  (setq xclip-last-selected-text-primary text)
-  (when xclip-select-enable-clipboard
-    (xclip-set-selection 'clipboard text)
-    (setq xclip-last-selected-text-clipboard text)))
+  (defun xclip-select-text (text)
+    "See `x-select-text'."
+    (xclip-set-selection 'primary text)
+    (setq xclip-last-selected-text-primary text)
+    (when xclip-select-enable-clipboard
+      (xclip-set-selection 'clipboard text)
+      (setq xclip-last-selected-text-clipboard text)))
 
-(defun xclip-selection-value ()
-  "See `x-selection-value'."
-  (let ((clip-text (when xclip-select-enable-clipboard
-                     (xclip-get-selection 'CLIPBOARD))))
-    (setq clip-text
-          (cond                         ; Check clipboard selection.
-           ((or (not clip-text) (string= clip-text ""))
-            (setq xclip-last-selected-text-clipboard nil))
-           ((eq clip-text xclip-last-selected-text-clipboard)
-            nil)
-           ((string= clip-text xclip-last-selected-text-clipboard)
-            ;; Record the newer string so subsequent calls can use the
-            ;; `eq' test.
-            (setq xclip-last-selected-text-clipboard clip-text)
-            nil)
-           (t (setq xclip-last-selected-text-clipboard clip-text))))
-    (or clip-text
-        (when (and (memq xclip-method '(xsel xclip)) (getenv "DISPLAY"))
-          (let ((primary-text (with-output-to-string
-                                (process-file xclip-program nil
-                                              standard-output nil "-o"))))
-            (setq primary-text
-                  (cond                 ; Check primary selection.
-                   ((or (not primary-text) (string= primary-text ""))
-                    (setq xclip-last-selected-text-primary nil))
-                   ((eq primary-text xclip-last-selected-text-primary)
-                    nil)
-                   ((string= primary-text xclip-last-selected-text-primary)
-                    ;; Record the newer string so subsequent calls can
-                    ;; use the `eq' test.
-                    (setq xclip-last-selected-text-primary primary-text)
-                    nil)
-                   (t (setq xclip-last-selected-text-primary primary-text))))
-            primary-text)))))
+  (defun xclip-selection-value ()
+    "See `x-selection-value'."
+    (let ((clip-text (when xclip-select-enable-clipboard
+                       (xclip-get-selection 'CLIPBOARD))))
+      (setq clip-text
+            (cond                       ; Check clipboard selection.
+             ((or (not clip-text) (string= clip-text ""))
+              (setq xclip-last-selected-text-clipboard nil))
+             ((eq clip-text xclip-last-selected-text-clipboard)
+              nil)
+             ((string= clip-text xclip-last-selected-text-clipboard)
+              ;; Record the newer string so subsequent calls can use the
+              ;; `eq' test.
+              (setq xclip-last-selected-text-clipboard clip-text)
+              nil)
+             (t (setq xclip-last-selected-text-clipboard clip-text))))
+      (or clip-text
+          (when (and (memq xclip-method '(xsel xclip)) (getenv "DISPLAY"))
+            (let ((primary-text (with-output-to-string
+                                  (process-file xclip-program nil
+                                                standard-output nil "-o"))))
+              (setq primary-text
+                    (cond               ; Check primary selection.
+                     ((or (not primary-text) (string= primary-text ""))
+                      (setq xclip-last-selected-text-primary nil))
+                     ((eq primary-text xclip-last-selected-text-primary)
+                      nil)
+                     ((string= primary-text xclip-last-selected-text-primary)
+                      ;; Record the newer string so subsequent calls can
+                      ;; use the `eq' test.
+                      (setq xclip-last-selected-text-primary primary-text)
+                      nil)
+                     (t (setq xclip-last-selected-text-primary primary-text))))
+              primary-text)))))
 
-(defun xclip--setup ()
-  (setq interprogram-cut-function #'xclip-select-text)
-  (setq interprogram-paste-function #'xclip-selection-value))
+  (defun xclip--setup ()
+    (setq interprogram-cut-function 'xclip-select-text)
+    (setq interprogram-paste-function 'xclip-selection-value)))
 
 
 (provide 'xclip)
