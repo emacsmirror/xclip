@@ -5,7 +5,7 @@
 ;; Author: Leo Liu <sdl.web@gmail.com>
 ;; Keywords: convenience, tools
 ;; Created: 2007-12-30
-;; Version: 1.6
+;; Version: 1.7
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -25,13 +25,17 @@
 ;; This package allows Emacs to copy to and paste from the GUI clipboard
 ;; when running in text terminal.
 ;;
-;; It relies on external command-line tools for that, which you may need
+;; It can use external command-line tools for that, which you may need
 ;; to install in order for the package to work.
 ;; More specifically, it can use the following tools:
 ;; - Under X11: `xclip' or `xsel' (http://xclip.sourceforge.net and
 ;;   http://www.vergenet.net/~conrad/software/xsel/ respectively).
 ;; - MacOS: `pbpaste/pbcopy'
 ;; - Cygwin: `getclip/putclip'
+;; - Emacs: It can also use Emacs's built-in GUI support to talk to the GUI.
+;;   This requires an Emacs built with GUI support.
+;;   It uses `make-frame-on-display' which has been tested to work under X11,
+;;   but it's not known whether it works under MacOS or Windows.
 ;;
 ;; To use, just add (xclip-mode 1) to your ~/.emacs or do `M-x clip-mode'
 ;; after which the usual kill/yank commands will use the GUI selections
@@ -65,18 +69,22 @@ If non-nil `xclip-program' is ignored.")
 (make-obsolete 'xclip-use-pbcopy&paste 'xclip-method "xclip-1.5")
 
 (defcustom xclip-method
-   (if xclip-use-pbcopy&paste 'pbpaste
-     (or
-      (and (executable-find "xclip") 'xclip)
-      (and (executable-find "xsel") 'xsel)
-      (and (eq system-type 'cygwin) (executable-find "getclip") 'getclip)
-      'xclip))
+  (or
+   (and xclip-use-pbcopy&paste 'pbpaste)
+   (and (eq system-type 'cygwin) (executable-find "getclip") 'getclip)
+   (and (executable-find "xclip") 'xclip)
+   (and (executable-find "xsel") 'xsel)
+   (and (fboundp 'x-create-frame) (getenv "DISPLAY") 'emacs)
+   'xclip)
   "Method to use to access the GUI's clipboard.
 Can be one of `pbpaste' for MacOS, `xclip' or `xsel' for X11,
-and `getclip' under Cygwin."
+and `getclip' under Cygwin, or `emacs' to use Emacs's GUI code for that."
   :type '(choice
           (const :tag "MacOS: pbcopy/pbpaste" pbpaste)
-          (const :tag "X11: xclip" xclip)))
+          (const :tag "Cygwin: getclip/putclip" getclip)
+          (const :tag "X11: xclip" xclip)
+          (const :tag "X11: xsel" xsel)
+          (const :tag "X11: Emacs" emacs)))
 
 (defcustom xclip-program (symbol-name xclip-method)
   "Name of the clipboard access command."
@@ -88,75 +96,100 @@ and `getclip' under Cygwin."
   "TYPE is a symbol: primary, secondary and clipboard.
 
 See also `x-set-selection'."
-  (let* ((process-connection-type nil)
-         (proc
-          (pcase xclip-method
-            (`pbpaste
-             (when (memq type '(clipboard CLIPBOARD))
-               (start-process
-                "pbcopy" nil
-                (replace-regexp-in-string "\\(.*\\)pbpaste" "\\1pbcopy"
-                                          xclip-program 'fixedcase))))
-            (`getclip
-             (when (memq type '(clipboard CLIPBOARD))
-               (start-process
-                "putclip" nil
-                (replace-regexp-in-string "\\(.*\\)getclip" "\\1putclip"
-                                          xclip-program 'fixedcase))))
-            (`xclip
-             (when (getenv "DISPLAY")
-               (start-process "xclip" nil xclip-program
-                              "-selection" (symbol-name type))))
-            (`xsel
-             (when (and (getenv "DISPLAY")
-                        (memq type '(clipboard CLIPBOARD
-                                     primary PRIMARY
-                                     secondary SECONDARY)))
-               (start-process
-                "xsel" nil xclip-program
-                "-i" (concat "--" (downcase (symbol-name type))))))
-            (method (error "Unknown `xclip-method': %S" method)))))
-    (when proc
-      (process-send-string proc data)
-      (process-send-eof proc))
-    data))
+  (if (eq xclip-method 'emacs)
+      (with-selected-frame (xclip--hidden-frame)
+        (let ((xclip-mode nil)) ;;Just out of paranoia.
+          (gui-backend-set-selection type data)))
+    (let* ((process-connection-type nil)
+           (proc
+            (pcase xclip-method
+              (`emacs nil)
+              (`pbpaste
+               (when (memq type '(clipboard CLIPBOARD))
+                 (start-process
+                  "pbcopy" nil
+                  (replace-regexp-in-string "\\(.*\\)pbpaste" "\\1pbcopy"
+                                            xclip-program 'fixedcase))))
+              (`getclip
+               (when (memq type '(clipboard CLIPBOARD))
+                 (start-process
+                  "putclip" nil
+                  (replace-regexp-in-string "\\(.*\\)getclip" "\\1putclip"
+                                            xclip-program 'fixedcase))))
+              (`xclip
+               (when (getenv "DISPLAY")
+                 (start-process "xclip" nil xclip-program
+                                "-selection" (symbol-name type))))
+              (`xsel
+               (when (and (getenv "DISPLAY")
+                          (memq type '(clipboard CLIPBOARD
+                                       primary PRIMARY
+                                       secondary SECONDARY)))
+                 (start-process
+                  "xsel" nil xclip-program
+                  "-i" (concat "--" (downcase (symbol-name type))))))
+              (method (error "Unknown `xclip-method': %S" method)))))
+      (when proc
+        (process-send-string proc data)
+        (process-send-eof proc))
+      data)))
 
 (defun xclip-get-selection (type)
   "TYPE is a symbol: primary, secondary and clipboard."
-  (with-output-to-string
-    (pcase xclip-method
-      (`pbpaste
-       (when (memq type '(clipboard CLIPBOARD))
-         (process-file xclip-program nil standard-output nil "-Prefer" "txt")))
-      (`getclip
-       (when (memq type '(clipboard CLIPBOARD))
-         (process-file xclip-program nil standard-output nil)))
-      (`xclip
-       (when (getenv "DISPLAY")
-         (process-file xclip-program nil standard-output nil
-                       "-o" "-selection" (symbol-name type))))
-      (`xsel
-       (when (and (getenv "DISPLAY")
-                  (memq type '(clipboard CLIPBOARD
-                               primary PRIMARY
-                               secondary SECONDARY)))
-         (process-file xclip-program nil standard-output nil
-                       "-o" (concat "--" (downcase (symbol-name type))))))
-      (method (error "Unknown `xclip-method': %S" method)))))
+  (if (eq xclip-method 'emacs)
+      (with-selected-frame (xclip--hidden-frame)
+        (let ((xclip-mode nil))         ;;Just out of paranoia.
+          (gui-backend-get-selection type 'STRING)))
+    (with-output-to-string
+      (pcase xclip-method
+        (`pbpaste
+         (when (memq type '(clipboard CLIPBOARD))
+           (process-file xclip-program nil standard-output nil
+                         "-Prefer" "txt")))
+        (`getclip
+         (when (memq type '(clipboard CLIPBOARD))
+           (process-file xclip-program nil standard-output nil)))
+        (`xclip
+         (when (getenv "DISPLAY")
+           (process-file xclip-program nil standard-output nil
+                         "-o" "-selection" (symbol-name type))))
+        (`xsel
+         (when (and (getenv "DISPLAY")
+                    (memq type '(clipboard CLIPBOARD
+                                 primary PRIMARY
+                                 secondary SECONDARY)))
+           (process-file xclip-program nil standard-output nil
+                         "-o" (concat "--" (downcase (symbol-name type))))))
+        (method (error "Unknown `xclip-method': %S" method))))))
 
 ;;;###autoload
 (define-minor-mode xclip-mode
   "Minor mode to use the `xclip' program to copy&paste."
   :global t
-  (remove-hook 'terminal-init-xterm-hook #'xclip--setup)
+  (when (fboundp 'xclip--setup)
+    (remove-hook 'terminal-init-xterm-hook #'xclip--setup))
   (when xclip-mode
     (unless (executable-find xclip-program)
       (setq xclip-mode nil)
       (signal 'file-error (list "Searching for program"
 				xclip-program "no such file")))
-    (when (< emacs-major-version 25)
+    (when (fboundp 'xclip--setup)
       ;; NOTE: See `tty-run-terminal-initialization' and term/README
       (add-hook 'terminal-init-xterm-hook #'xclip--setup))))
+
+;;;; Support code for the internal `emacs' method.
+
+(defvar xclip--hidden-frame nil)
+
+(defun xclip--hidden-frame ()
+  (or xclip--hidden-frame
+      (setq xclip--hidden-frame
+            (make-frame-on-display (getenv "DISPLAY")
+                                   '((visibility . nil)
+                                     (user-position . t)
+                                     (left . 0)
+                                     (top . 0)
+                                     (no-other-frame . t))))))
 
 ;;;; Glue code for Emacs ≥ 25
 
