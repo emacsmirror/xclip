@@ -1,11 +1,11 @@
 ;;; xclip.el --- Copy&paste GUI clipboard from text terminal  -*- lexical-binding:t -*-
 
-;; Copyright (C) 2007, 2012, 2013, 2017, 2018  Free Software Foundation, Inc.
+;; Copyright (C) 2007-2019  Free Software Foundation, Inc.
 
 ;; Author: Leo Liu <sdl.web@gmail.com>
 ;; Keywords: convenience, tools
 ;; Created: 2007-12-30
-;; Version: 1.7
+;; Version: 1.8
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -144,21 +144,21 @@ See also `x-set-selection'."
       (pcase xclip-method
         (`pbpaste
          (when (memq type '(clipboard CLIPBOARD))
-           (process-file xclip-program nil standard-output nil
+           (call-process xclip-program nil standard-output nil
                          "-Prefer" "txt")))
         (`getclip
          (when (memq type '(clipboard CLIPBOARD))
-           (process-file xclip-program nil standard-output nil)))
+           (call-process xclip-program nil standard-output nil)))
         (`xclip
          (when (getenv "DISPLAY")
-           (process-file xclip-program nil standard-output nil
+           (call-process xclip-program nil standard-output nil
                          "-o" "-selection" (symbol-name type))))
         (`xsel
          (when (and (getenv "DISPLAY")
                     (memq type '(clipboard CLIPBOARD
                                  primary PRIMARY
                                  secondary SECONDARY)))
-           (process-file xclip-program nil standard-output nil
+           (call-process xclip-program nil standard-output nil
                          "-o" (concat "--" (downcase (symbol-name type))))))
         (method (error "Unknown `xclip-method': %S" method))))))
 
@@ -281,7 +281,7 @@ Emacs-NN and is then later run by Emacs>NN."
       (or clip-text
           (when (and (memq xclip-method '(xsel xclip)) (getenv "DISPLAY"))
             (let ((primary-text (with-output-to-string
-                                  (process-file xclip-program nil
+                                  (call-process xclip-program nil
                                                 standard-output nil "-o"))))
               (setq primary-text
                     (cond               ; Check primary selection.
