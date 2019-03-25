@@ -74,6 +74,7 @@ If non-nil `xclip-program' is ignored.")
    (and (eq system-type 'cygwin) (executable-find "getclip") 'getclip)
    (and (executable-find "xclip") 'xclip)
    (and (executable-find "xsel") 'xsel)
+   (and (executable-find "wl-copy") 'wl-copy) ;github.com/bugaevc/wl-clipboard
    (and (fboundp 'x-create-frame) (getenv "DISPLAY") 'emacs)
    'xclip)
   "Method to use to access the GUI's clipboard.
@@ -84,6 +85,7 @@ and `getclip' under Cygwin, or `emacs' to use Emacs's GUI code for that."
           (const :tag "Cygwin: getclip/putclip" getclip)
           (const :tag "X11: xclip" xclip)
           (const :tag "X11: xsel" xsel)
+          (const :tag "Wayland: wl-copy" wl-copy)
           (const :tag "X11: Emacs" emacs)))
 
 (defcustom xclip-program (symbol-name xclip-method)
@@ -128,6 +130,12 @@ See also `x-set-selection'."
                  (start-process
                   "xsel" nil xclip-program
                   "-i" (concat "--" (downcase (symbol-name type))))))
+              (`wl-copy
+               (when (and (getenv "WAYLAND_DISPLAY")
+                          (memq type '(clipboard CLIPBOARD primary PRIMARY)))
+                 (apply #'start-process
+                        "wl-copy" nil xclip-program
+                        (if (memq type '(primary PRIMARY)) '("-p")))))
               (method (error "Unknown `xclip-method': %S" method)))))
       (when proc
         (process-send-string proc data)
@@ -160,6 +168,14 @@ See also `x-set-selection'."
                                  secondary SECONDARY)))
            (call-process xclip-program nil standard-output nil
                          "-o" (concat "--" (downcase (symbol-name type))))))
+        (`wl-copy
+         (when (and (getenv "WAYLAND_DISPLAY")
+                    (memq type '(clipboard CLIPBOARD primary PRIMARY)))
+           (apply #'call-process
+                  (replace-regexp-in-string "\\(.*\\)copy" "\\1paste"
+                                            xclip-program 'fixedcase)
+                  nil standard-output nil
+                  (if (memq type '(primary PRIMARY)) '("-p")))))
         (method (error "Unknown `xclip-method': %S" method))))))
 
 ;;;###autoload
