@@ -5,7 +5,7 @@
 ;; Author: Leo Liu <sdl.web@gmail.com>
 ;; Keywords: convenience, tools
 ;; Created: 2007-12-30
-;; Version: 1.8
+;; Version: 1.9
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -32,7 +32,8 @@
 ;;   http://www.vergenet.net/~conrad/software/xsel/ respectively).
 ;; - MacOS: `pbpaste/pbcopy'
 ;; - Cygwin: `getclip/putclip'
-;; - Termux: `termux-clipboard-get/termux-clipboard-set'
+;; - Under Wayland: `wl-clipboard' (https://github.com/bugaevc/wl-clipboard)
+;; - Termux: `termux-clipboard-get/set'
 ;; - Emacs: It can also use Emacs's built-in GUI support to talk to the GUI.
 ;;   This requires an Emacs built with GUI support.
 ;;   It uses `make-frame-on-display' which has been tested to work under X11,
@@ -76,7 +77,7 @@ If non-nil `xclip-program' is ignored.")
    (and (executable-find "xclip") 'xclip)
    (and (executable-find "xsel") 'xsel)
    (and (executable-find "wl-copy") 'wl-copy) ;github.com/bugaevc/wl-clipboard
-   (and (executable-find "termux-clipboard-get") 'termux-clipboard-get) ;github.com/bugaevc/wl-clipboard
+   (and (executable-find "termux-clipboard-get") 'termux-clipboard-get)
    (and (fboundp 'x-create-frame) (getenv "DISPLAY") 'emacs)
    'xclip)
   "Method to use to access the GUI's clipboard.
@@ -88,7 +89,7 @@ and `getclip' under Cygwin, or `emacs' to use Emacs's GUI code for that."
           (const :tag "X11: xclip" xclip)
           (const :tag "X11: xsel" xsel)
           (const :tag "Wayland: wl-copy" wl-copy)
-          (const :tag "Termux: termux-clipboard-get/termux-clipboard-set" termux-clipboard-get)
+          (const :tag "Termux: termux-clipboard-get/set" termux-clipboard-get)
           (const :tag "X11: Emacs" emacs)))
 
 (defcustom xclip-program (symbol-name xclip-method)
@@ -140,11 +141,11 @@ See also `x-set-selection'."
                         "wl-copy" nil xclip-program
                         (if (memq type '(primary PRIMARY)) '("-p")))))
               (`termux-clipboard-get
-               (start-process "termux-clipboard-set" nil
-                              (replace-regexp-in-string
-                               "\\(.*\\)termux-clipboard-get"
-                               "\\1termux-clipboard-set"
-                               xclip-program 'fixedcase)))
+               (when (memq type '(clipboard CLIPBOARD))
+                 (start-process "termux-clipboard-set" nil
+                                (replace-regexp-in-string
+                                 "\\(.*\\)get" "\\1set"
+                                 xclip-program 'fixedcase))))
               (method (error "Unknown `xclip-method': %S" method)))))
       (when proc
         (process-send-string proc data)
@@ -186,7 +187,8 @@ See also `x-set-selection'."
                   nil standard-output nil
                   (if (memq type '(primary PRIMARY)) '("-p")))))
         (`termux-clipboard-get
-         (call-process xclip-program nil standard-output nil))
+         (when (memq type '(clipboard CLIPBOARD))
+           (call-process xclip-program nil standard-output nil)))
         (method (error "Unknown `xclip-method': %S" method))))))
 
 ;;;###autoload
