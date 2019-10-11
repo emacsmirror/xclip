@@ -185,7 +185,12 @@ See also `x-set-selection'."
                   (replace-regexp-in-string "\\(.*\\)copy" "\\1paste"
                                             xclip-program 'fixedcase)
                   nil standard-output nil
-                  (if (memq type '(primary PRIMARY)) '("-p")))))
+                  ;; From wl-paste's doc:
+                  ;;   -n, --no-newline  Do not append a newline character
+                  ;;    after the pasted clipboard content. This option is
+                  ;;    automatically enabled for non-text content types and
+                  ;;    when using the --watch mode.
+                  "-n" (if (memq type '(primary PRIMARY)) '("-p")))))
         (`termux-clipboard-get
          (when (memq type '(clipboard CLIPBOARD))
            (call-process xclip-program nil standard-output nil)))
