@@ -1,11 +1,11 @@
 ;;; xclip.el --- Copy&paste GUI clipboard from text terminal  -*- lexical-binding:t -*-
 
-;; Copyright (C) 2007-2019  Free Software Foundation, Inc.
+;; Copyright (C) 2007-2020  Free Software Foundation, Inc.
 
 ;; Author: Leo Liu <sdl.web@gmail.com>
 ;; Keywords: convenience, tools
 ;; Created: 2007-12-30
-;; Version: 1.9
+;; Version: 1.10
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -266,15 +266,18 @@ Emacs-NN and is then later run by Emacs>NN."
           nil))
 
       ;; BIG UGLY HACK!
-      ;; xterm.el has a defmethod to use some (poorly supported) escape
+      ;; term/xterm.el has a defmethod to use some (poorly supported) escape
       ;; sequences (code named OSC 52) for clipboard interaction, and enables
       ;; it by default.
-      ;; Problem is, that its defmethod takes precedence over our defmethod,
+      ;; Problem is that its defmethod takes precedence over our defmethod,
       ;; so we need to disable it in order to be called.
       (cl-defmethod gui-backend-set-selection :extra "xclip-override"
           (selection-symbol value
            &context (window-system nil)
-                    ((terminal-parameter nil 'xterm--set-selection) (eql t)))
+                    ((terminal-parameter nil 'xterm--set-selection) (eql t))
+                    ;; This extra test gives this method higher precedence
+                    ;; over the one in term/xterm.el.
+                    ((featurep 'term/xterm) (eql t)))
         ;; Disable this method which doesn't work anyway in 99% of the cases!
         (setf (terminal-parameter nil 'xterm--set-selection) nil)
         ;; Try again!
