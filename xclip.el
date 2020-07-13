@@ -79,6 +79,8 @@ If non-nil `xclip-program' is ignored.")
    (and (executable-find "wl-copy") 'wl-copy) ;github.com/bugaevc/wl-clipboard
    (and (executable-find "termux-clipboard-get") 'termux-clipboard-get)
    (and (fboundp 'x-create-frame) (getenv "DISPLAY") 'emacs)
+   (and (eq system-type 'gnu/linux) ;FIXME: How do we detect WSL?
+        (executable-find "powershell.exe") 'powershell)
    'xclip)
   "Method to use to access the GUI's clipboard.
 Can be one of `pbpaste' for MacOS, `xclip' or `xsel' for X11,
@@ -90,6 +92,7 @@ and `getclip' under Cygwin, or `emacs' to use Emacs's GUI code for that."
           (const :tag "X11: xsel" xsel)
           (const :tag "Wayland: wl-copy" wl-copy)
           (const :tag "Termux: termux-clipboard-get/set" termux-clipboard-get)
+          (const :tag "WSL: clip.exe/powershell.exe" powershell)
           (const :tag "X11: Emacs" emacs)))
 
 (defcustom xclip-program (symbol-name xclip-method)
@@ -116,6 +119,9 @@ See also `x-set-selection'."
                   "pbcopy" nil
                   (replace-regexp-in-string "\\(.*\\)pbpaste" "\\1pbcopy"
                                             xclip-program 'fixedcase))))
+              (`powershell
+               (when (memq type '(clipboard CLIPBOARD))
+                 (start-process "clip.exe" nil "clip.exe")))
               (`getclip
                (when (memq type '(clipboard CLIPBOARD))
                  (start-process
@@ -164,6 +170,11 @@ See also `x-set-selection'."
          (when (memq type '(clipboard CLIPBOARD))
            (call-process xclip-program nil standard-output nil
                          "-Prefer" "txt")))
+        (`powershell
+         (when (memq type '(clipboard CLIPBOARD))
+           (let ((coding-system-for-read 'dos)) ;Convert CR->LF.
+             (call-process "powershell.exe" nil `(,standard-output nil) nil
+                           "-command" "Get-Clipboard"))))
         (`getclip
          (when (memq type '(clipboard CLIPBOARD))
            (call-process xclip-program nil standard-output nil)))
