@@ -1,11 +1,11 @@
 ;;; xclip.el --- Copy&paste GUI clipboard from text terminal  -*- lexical-binding:t -*-
 
-;; Copyright (C) 2007-2020  Free Software Foundation, Inc.
+;; Copyright (C) 2007-2022  Free Software Foundation, Inc.
 
 ;; Author: Leo Liu <sdl.web@gmail.com>
 ;; Keywords: convenience, tools
 ;; Created: 2007-12-30
-;; Version: 1.10
+;; Version: 1.11
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -101,10 +101,11 @@ and `getclip' under Cygwin, or `emacs' to use Emacs's GUI code for that."
 
 ;;;; Core functions.
 
+(defvar xclip-mode)
+
 (defun xclip-set-selection (type data)
   "TYPE is a symbol: primary, secondary and clipboard.
-
-See also `x-set-selection'."
+TYPE and DATA are the same as for `gui-set-selection'."
   (if (eq xclip-method 'emacs)
       (with-selected-frame (xclip--hidden-frame)
         (let ((xclip-mode nil)) ;;Just out of paranoia.
