@@ -18,7 +18,7 @@
 ;; GNU General Public License for more details.
 
 ;; You should have received a copy of the GNU General Public License
-;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;; Commentary:
 
@@ -28,8 +28,8 @@
 ;; It can use external command-line tools for that, which you may need
 ;; to install in order for the package to work.
 ;; More specifically, it can use the following tools:
-;; - Under X11: `xclip' or `xsel' (http://xclip.sourceforge.net and
-;;   http://www.vergenet.net/~conrad/software/xsel/ respectively).
+;; - Under X11: `xclip' or `xsel' (https://xclip.sourceforge.net and
+;;   https://www.vergenet.net/~conrad/software/xsel/ respectively).
 ;; - MacOS: `pbpaste/pbcopy'
 ;; - Cygwin: `getclip/putclip'
 ;; - Under Wayland: `wl-clipboard' (https://github.com/bugaevc/wl-clipboard)
