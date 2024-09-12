@@ -1,6 +1,6 @@
 ;;; xclip.el --- Copy&paste GUI clipboard from text terminal  -*- lexical-binding:t -*-
 
-;; Copyright (C) 2007-2022  Free Software Foundation, Inc.
+;; Copyright (C) 2007-2024  Free Software Foundation, Inc.
 
 ;; Author: Leo Liu <sdl.web@gmail.com>
 ;; Keywords: convenience, tools
@@ -228,7 +228,7 @@ TYPE and DATA are the same as for `gui-set-selection'."
 (defvar xclip--hidden-frame nil)
 
 (defun xclip--hidden-frame ()
-  (or xclip--hidden-frame
+  (or (and (frame-live-p xclip--hidden-frame) xclip--hidden-frame)
       (setq xclip--hidden-frame
             (make-frame-on-display (getenv "DISPLAY")
                                    '((visibility . nil)
