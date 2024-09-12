@@ -5,7 +5,7 @@
 ;; Author: Leo Liu <sdl.web@gmail.com>
 ;; Keywords: convenience, tools
 ;; Created: 2007-12-30
-;; Version: 1.11
+;; Version: 1.11.1
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -49,6 +49,24 @@
 ;; into Emacs in a different way.  AFAICT it currently only supports
 ;; copy/pasting from an external application to Emacs and not from Emacs to
 ;; another application (for which it relies on the default code).
+
+;;; News:
+
+;; Since 1.11:
+;;
+;; - Bugfixes only so far.
+;;
+;; Changes in 1.11:
+;;
+;; - Add tentative WSL support
+;;
+;; Changes in 1.9:
+;;
+;; - Add support for Termux and Wayland.
+;;
+;; Changes in 1.7:
+;;
+;; - Add `emacs' method to use built-in GUI code i.s.o external executable.
 
 ;;; Code:
 
